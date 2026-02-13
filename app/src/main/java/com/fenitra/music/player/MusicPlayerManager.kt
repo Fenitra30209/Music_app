@@ -1,9 +1,13 @@
 package com.fenitra.music.player
 
+import android.content.ComponentName
 import android.content.Context
-import android.media.MediaPlayer
-import android.net.Uri
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.util.Log
+import com.fenitra.music.data.entity.Song
+import com.fenitra.music.service.MusicService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,7 +20,8 @@ import kotlinx.coroutines.launch
 class MusicPlayerManager(private val context: Context) {
 
     private val TAG = "MusicPlayerManager"
-    private var mediaPlayer: MediaPlayer? = null
+    private var musicService: MusicService? = null
+    private var isBound = false
     private var positionUpdateJob: Job? = null
 
     private val _currentPosition = MutableStateFlow(0L)
@@ -27,41 +32,106 @@ class MusicPlayerManager(private val context: Context) {
 
     var onCompletion: (() -> Unit)? = null
 
-    fun playSong(filePath: String, onError: (String) -> Unit = {}) {
-        try {
-            stop()
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.d(TAG, "Service connected")
+            val binder = service as MusicService.MusicBinder
+            musicService = binder.getService()
+            isBound = true
 
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(context, Uri.parse(filePath))
-                prepare()
-                start()
-
-                setOnCompletionListener {
-                    _isPlaying.value = false
-                    onCompletion?.invoke()
-                }
-
-                setOnErrorListener { _, what, extra ->
-                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    onError("Erreur de lecture: $what")
-                    true
-                }
+            // Configurer le callback de fin de lecture
+            musicService?.onCompletionCallback = {
+                onCompletion?.invoke()
             }
 
-            _isPlaying.value = true
-            startPositionUpdate()
+            // Synchroniser les états
+            CoroutineScope(Dispatchers.Main).launch {
+                musicService?.isPlaying?.collect { playing ->
+                    _isPlaying.value = playing
+                    if (playing) {
+                        startPositionUpdate()
+                    } else {
+                        stopPositionUpdate()
+                    }
+                }
+            }
+        }
 
+        override fun onServiceDisconnected(name: ComponentName?) {
+            Log.d(TAG, "Service disconnected")
+            musicService = null
+            isBound = false
+        }
+    }
+
+    init {
+        bindService()
+    }
+
+    private fun bindService() {
+        val intent = Intent(context, MusicService::class.java)
+        context.startService(intent)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    fun playSong(filePath: String, onError: (String) -> Unit = {}) {
+        try {
+            if (!isBound || musicService == null) {
+                bindService()
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(300)
+                    playSongInternal(filePath, onError)
+                }
+            } else {
+                playSongInternal(filePath, onError)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error playing song", e)
             onError("Impossible de lire la chanson: ${e.message}")
         }
     }
 
+    private fun playSongInternal(filePath: String, onError: (String) -> Unit) {
+        try {
+            // Créer un objet Song temporaire (devrait venir du ViewModel)
+            val song = Song(
+                title = "Unknown",
+                artist = "Unknown",
+                album = "Unknown",
+                duration = 0,
+                filePath = filePath,
+                dateAdded = System.currentTimeMillis()
+            )
+            musicService?.playSong(song)
+            startPositionUpdate()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in playSongInternal", e)
+            onError("Erreur: ${e.message}")
+        }
+    }
+
+    fun playSongWithInfo(song: Song, onError: (String) -> Unit = {}) {
+        try {
+            if (!isBound || musicService == null) {
+                bindService()
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(300)
+                    musicService?.playSong(song)
+                    startPositionUpdate()
+                }
+            } else {
+                musicService?.playSong(song)
+                startPositionUpdate()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing song with info", e)
+            onError("Impossible de lire la chanson: ${e.message}")
+        }
+    }
+
     fun pause() {
         try {
-            mediaPlayer?.pause()
-            _isPlaying.value = false
-            stopPositionUpdate()
+            musicService?.pause()
         } catch (e: Exception) {
             Log.e(TAG, "Error pausing", e)
         }
@@ -69,9 +139,7 @@ class MusicPlayerManager(private val context: Context) {
 
     fun resume() {
         try {
-            mediaPlayer?.start()
-            _isPlaying.value = true
-            startPositionUpdate()
+            musicService?.play()
         } catch (e: Exception) {
             Log.e(TAG, "Error resuming", e)
         }
@@ -79,7 +147,7 @@ class MusicPlayerManager(private val context: Context) {
 
     fun seekTo(position: Long) {
         try {
-            mediaPlayer?.seekTo(position.toInt())
+            musicService?.seekTo(position.toInt())
             _currentPosition.value = position
         } catch (e: Exception) {
             Log.e(TAG, "Error seeking", e)
@@ -89,11 +157,10 @@ class MusicPlayerManager(private val context: Context) {
     fun stop() {
         try {
             stopPositionUpdate()
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-            mediaPlayer = null
-            _isPlaying.value = false
-            _currentPosition.value = 0L
+            val intent = Intent(context, MusicService::class.java).apply {
+                action = MusicService.ACTION_STOP
+            }
+            context.startService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping", e)
         }
@@ -101,7 +168,7 @@ class MusicPlayerManager(private val context: Context) {
 
     fun getDuration(): Long {
         return try {
-            mediaPlayer?.duration?.toLong() ?: 0L
+            musicService?.getDuration()?.toLong() ?: 0L
         } catch (e: Exception) {
             0L
         }
@@ -112,9 +179,9 @@ class MusicPlayerManager(private val context: Context) {
         positionUpdateJob = CoroutineScope(Dispatchers.Main).launch {
             while (isActive && _isPlaying.value) {
                 try {
-                    val position = mediaPlayer?.currentPosition?.toLong() ?: 0L
+                    val position = musicService?.getCurrentPosition()?.toLong() ?: 0L
                     _currentPosition.value = position
-                    delay(500) // Mise à jour toutes les 500ms
+                    delay(500)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error updating position", e)
                 }
@@ -128,6 +195,14 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun release() {
-        stop()
+        try {
+            stopPositionUpdate()
+            if (isBound) {
+                context.unbindService(serviceConnection)
+                isBound = false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing", e)
+        }
     }
 }

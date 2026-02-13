@@ -94,6 +94,9 @@ dependencies {
     // Media
     implementation("androidx.media:media:1.7.0")
 
+    // Pour Palette (couleurs dynamiques)
+    implementation("androidx.palette:palette-ktx:1.0.0")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

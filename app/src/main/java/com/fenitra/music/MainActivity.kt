@@ -28,7 +28,7 @@ import com.fenitra.music.util.MusicScanner
 
 class MainActivity : ComponentActivity() {
 
-    private val TAG = "MainActivity"
+    private val tag = "MainActivity"
     private val viewModel: MusicViewModel by viewModels()
     private var musicService: MusicService? = null
     private var isBound = false
@@ -38,30 +38,42 @@ class MainActivity : ComponentActivity() {
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isBound = true
-            Log.d(TAG, "Service connected")
+            Log.d(tag, "Service connected")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             musicService = null
             isBound = false
-            Log.d(TAG, "Service disconnected")
+            Log.d(tag, "Service disconnected")
         }
     }
 
-    private val permissionLauncher = registerForActivityResult(
+    // Permission pour lire les fichiers audio
+    private val audioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            Log.d(TAG, "Permission granted")
+            Log.d(tag, "Audio permission granted")
             scanMusic()
         } else {
-            Log.e(TAG, "Permission denied")
+            Log.e(tag, "Audio permission denied")
+        }
+    }
+
+    // Permission pour les notifications (Android 13+)
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d(tag, "Notification permission granted")
+        } else {
+            Log.e(tag, "Notification permission denied")
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate")
+        Log.d(tag, "onCreate")
 
         try {
             // Démarrer et lier le service
@@ -79,46 +91,61 @@ class MainActivity : ComponentActivity() {
             setContent {
                 MusicTheme {
                     MusicApp(
-                        viewModel = viewModel,
-                        musicService = musicService
+                        viewModel = viewModel
                     )
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in onCreate", e)
+            Log.e(tag, "Error in onCreate", e)
         }
     }
 
     private fun checkPermissions() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // Permission pour les notifications (Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.d(tag, "Requesting notification permission")
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Permission pour lire les fichiers audio
+        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
 
         when {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
-                Log.d(TAG, "Permission already granted")
+            ContextCompat.checkSelfPermission(
+                this,
+                audioPermission
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                Log.d(tag, "Audio permission already granted")
                 scanMusic()
             }
             else -> {
-                Log.d(TAG, "Requesting permission")
-                permissionLauncher.launch(permission)
+                Log.d(tag, "Requesting audio permission")
+                audioPermissionLauncher.launch(audioPermission)
             }
         }
     }
 
     private fun scanMusic() {
         try {
-            Log.d(TAG, "Scanning music...")
+            Log.d(tag, "Scanning music...")
             val scanner = MusicScanner(this)
             val songs = scanner.scanAudioFiles()
-            Log.d(TAG, "Found ${songs.size} songs")
+            Log.d(tag, "Found ${songs.size} songs")
             if (songs.isNotEmpty()) {
                 viewModel.insertSongs(songs)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error scanning music", e)
+            Log.e(tag, "Error scanning music", e)
         }
     }
 
@@ -130,15 +157,20 @@ class MainActivity : ComponentActivity() {
                 isBound = false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in onDestroy", e)
+            Log.e(tag, "Error in onDestroy", e)
         }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // Gérer l'ouverture de l'app depuis la notification
+        Log.d(tag, "onNewIntent called")
     }
 }
 
 @Composable
 fun MusicApp(
-    viewModel: MusicViewModel,
-    musicService: MusicService?
+    viewModel: MusicViewModel
 ) {
     val navController = rememberNavController()
 
@@ -149,9 +181,6 @@ fun MusicApp(
         composable("home") {
             HomeScreen(
                 viewModel = viewModel,
-                onNavigateToPlaylists = {
-                    // TODO: Navigation vers les playlists
-                },
                 onNavigateToFavorites = {
                     // TODO: Navigation vers les favoris
                 },

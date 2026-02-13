@@ -16,7 +16,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: MusicRepository
     private val musicPlayer: MusicPlayerManager
 
-    // États de lecture - DÉCLARER EN PREMIER
+    // États de lecture
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong
 
@@ -151,8 +151,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _currentPlaylist.value = if (playlist.isEmpty()) allSongs.value else playlist
         currentIndex = _currentPlaylist.value.indexOfFirst { it.id == song.id }
 
-        // Lancer la lecture audio réelle
-        musicPlayer.playSong(song.filePath) { error ->
+        // Utiliser la nouvelle méthode avec l'objet Song complet
+        musicPlayer.playSongWithInfo(song) { error ->
             android.util.Log.e("MusicViewModel", error)
         }
     }
@@ -187,7 +187,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         val nextSong = playlist[currentIndex]
         _currentSong.value = nextSong
-        musicPlayer.playSong(nextSong.filePath)
+        musicPlayer.playSongWithInfo(nextSong)
     }
 
     fun playPrevious() {
@@ -214,7 +214,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         val previousSong = playlist[currentIndex]
         _currentSong.value = previousSong
-        musicPlayer.playSong(previousSong.filePath)
+        musicPlayer.playSongWithInfo(previousSong)
     }
 
     fun seekTo(position: Long) {
@@ -237,7 +237,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         when (_repeatMode.value) {
             RepeatMode.ONE -> {
                 _currentSong.value?.let { song ->
-                    musicPlayer.playSong(song.filePath)
+                    musicPlayer.playSongWithInfo(song)
                 }
             }
             RepeatMode.ALL, RepeatMode.OFF -> {
