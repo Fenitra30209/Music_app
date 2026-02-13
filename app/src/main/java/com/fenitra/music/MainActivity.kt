@@ -28,6 +28,7 @@ import com.fenitra.music.ui.screens.HomeScreen
 import com.fenitra.music.ui.screens.NowPlayingScreen
 import com.fenitra.music.ui.screens.PlaylistsScreen
 import com.fenitra.music.ui.screens.PlaylistDetailScreen
+import com.fenitra.music.ui.screens.SplashScreen
 import com.fenitra.music.ui.theme.MusicTheme
 import com.fenitra.music.ui.viewmodel.MusicViewModel
 import com.fenitra.music.util.MusicScanner
@@ -183,68 +184,79 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MusicApp(viewModel: MusicViewModel) {
     val navController = rememberNavController()
+    var showSplash by remember { mutableStateOf(true) }
 
-    NavHost(
-        navController = navController,
-        startDestination = "home"
-    ) {
-        composable("home") {
-            HomeScreen(
-                viewModel = viewModel,
-                onNavigateToFavorites = {
-                    navController.navigate("favorites")
-                },
-                onNavigateToPlaylists = {
-                    navController.navigate("playlists")
-                },
-                onNavigateToNowPlaying = {
-                    navController.navigate("nowPlaying")
-                }
-            )
-        }
+    if (showSplash) {
+        // ========== ÉCRAN DE SPLASH ANIMÉ ==========
+        SplashScreen(
+            onSplashFinished = {
+                showSplash = false
+            }
+        )
+    } else {
+        // ========== APPLICATION PRINCIPALE ==========
+        NavHost(
+            navController = navController,
+            startDestination = "home"
+        ) {
+            composable("home") {
+                HomeScreen(
+                    viewModel = viewModel,
+                    onNavigateToFavorites = {
+                        navController.navigate("favorites")
+                    },
+                    onNavigateToPlaylists = {
+                        navController.navigate("playlists")
+                    },
+                    onNavigateToNowPlaying = {
+                        navController.navigate("nowPlaying")
+                    }
+                )
+            }
 
-        composable("nowPlaying") {
-            NowPlayingScreen(
-                viewModel = viewModel,
-                onBackClick = {
-                    navController.popBackStack()
-                }
-            )
-        }
+            composable("nowPlaying") {
+                NowPlayingScreen(
+                    viewModel = viewModel,
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
 
-        composable("playlists") {
-            PlaylistsScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToPlaylistDetail = { playlistId ->
-                    navController.navigate("playlistDetail/$playlistId")
-                }
-            )
-        }
+            composable("playlists") {
+                PlaylistsScreen(
+                    viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToPlaylistDetail = { playlistId ->
+                        navController.navigate("playlistDetail/$playlistId")
+                    }
+                )
+            }
 
-        composable(
-            route = "playlistDetail/{playlistId}",
-            arguments = listOf(navArgument("playlistId") { type = NavType.LongType })
-        ) { backStackEntry ->
-            val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
-            PlaylistDetailScreen(
-                playlistId = playlistId,
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToNowPlaying = {
-                    navController.navigate("nowPlaying")
-                }
-            )
-        }
+            composable(
+                route = "playlistDetail/{playlistId}",
+                arguments = listOf(navArgument("playlistId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
+                PlaylistDetailScreen(
+                    playlistId = playlistId,
+                    viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToNowPlaying = {
+                        navController.navigate("nowPlaying")
+                    }
+                )
+            }
 
-        composable("favorites") {
-            FavoritesScreen(
-                viewModel = viewModel,
-                onBackClick = { navController.popBackStack() },
-                onNavigateToNowPlaying = {
-                    navController.navigate("nowPlaying")
-                }
-            )
+            composable("favorites") {
+                FavoritesScreen(
+                    viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToNowPlaying = {
+                        navController.navigate("nowPlaying")
+                    }
+                )
+            }
         }
     }
 }
