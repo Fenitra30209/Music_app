@@ -56,6 +56,10 @@ class MusicRepository(
         )
     }
 
+    suspend fun upsertSongs(songs: List<Song>) {
+        songDao.upsertSongs(songs)
+    }
+
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.deletePlaylistSongCrossRef(
             PlaylistSongCrossRef(playlistId, songId)

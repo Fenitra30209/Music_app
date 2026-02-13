@@ -16,7 +16,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: MusicRepository
     private val musicPlayer: MusicPlayerManager
 
-    // États de lecture
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong
 
@@ -37,14 +36,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         repository = MusicRepository(database.songDao(), database.playlistDao())
         musicPlayer = MusicPlayerManager(application)
 
-        // Écouter les changements de position du player
         viewModelScope.launch {
             musicPlayer.currentPosition.collect { position ->
                 _currentPosition.value = position
             }
         }
 
-        // Gérer la fin de lecture
         musicPlayer.onCompletion = {
             onSongComplete()
         }
@@ -137,12 +134,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         repository.removeSongFromPlaylist(playlistId, songId)
     }
 
-    fun getPlaylistWithSongs(playlistId: Long) =
-        repository.getPlaylistWithSongs(playlistId).stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = null
-        )
+    fun getPlaylistWithSongs(playlistId: Long): Flow<com.fenitra.music.data.entity.PlaylistWithSongs?> {
+        return repository.getPlaylistWithSongs(playlistId)
+    }
+
+    fun upsertSongs(songs: List<Song>) = viewModelScope.launch {
+        repository.upsertSongs(songs)
+    }
+    // Exposer le repository
+    fun getRepository(): MusicRepository {
+        return repository
+    }
 
     // ========== FONCTIONS DE LECTURE ==========
 
@@ -151,7 +153,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _currentPlaylist.value = if (playlist.isEmpty()) allSongs.value else playlist
         currentIndex = _currentPlaylist.value.indexOfFirst { it.id == song.id }
 
-        // Utiliser la nouvelle méthode avec l'objet Song complet
         musicPlayer.playSongWithInfo(song) { error ->
             android.util.Log.e("MusicViewModel", error)
         }

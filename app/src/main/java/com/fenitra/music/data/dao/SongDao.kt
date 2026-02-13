@@ -39,6 +39,9 @@ interface SongDao {
     @Update
     suspend fun updateSong(song: Song)
 
+    @Upsert  // ou @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSongs(songs: List<Song>)
+
     @Delete
     suspend fun deleteSong(song: Song)
 

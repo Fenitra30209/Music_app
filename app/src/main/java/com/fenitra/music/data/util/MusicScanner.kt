@@ -2,11 +2,17 @@ package com.fenitra.music.util
 
 import android.content.Context
 import android.provider.MediaStore
+import android.util.Log
 import com.fenitra.music.data.entity.Song
+import com.fenitra.music.data.repository.MusicRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MusicScanner(private val context: Context) {
 
-    fun scanAudioFiles(): List<Song> {
+    private val tag = "MusicScanner"
+
+    suspend fun scanAudioFiles(repository: MusicRepository): List<Song> = withContext(Dispatchers.IO) {
         val songs = mutableListOf<Song>()
 
         val projection = arrayOf(
@@ -39,19 +45,41 @@ class MusicScanner(private val context: Context) {
             val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
             while (cursor.moveToNext()) {
-                val song = Song(
-                    id = cursor.getLong(idColumn),
-                    title = cursor.getString(titleColumn) ?: "Unknown",
-                    artist = cursor.getString(artistColumn) ?: "Unknown Artist",
-                    album = cursor.getString(albumColumn) ?: "Unknown Album",
-                    duration = cursor.getLong(durationColumn),
-                    filePath = cursor.getString(dataColumn),
-                    dateAdded = cursor.getLong(dateColumn) * 1000
-                )
+                val mediaId = cursor.getLong(idColumn)
+
+                // Vérifier si la chanson existe déjà dans la base de données
+                val existingSong = repository.getSongById(mediaId)
+
+                val song = if (existingSong != null) {
+                    // IMPORTANT: Préserver TOUTES les données existantes
+                    // Ne mettre à jour que les métadonnées qui peuvent changer
+                    existingSong.copy(
+                        title = cursor.getString(titleColumn) ?: existingSong.title,
+                        artist = cursor.getString(artistColumn) ?: existingSong.artist,
+                        album = cursor.getString(albumColumn) ?: existingSong.album,
+                        duration = cursor.getLong(durationColumn),
+                        filePath = cursor.getString(dataColumn) ?: existingSong.filePath
+                        // isFavorite et albumArt sont préservés automatiquement par le copy
+                    )
+                } else {
+                    // Nouvelle chanson
+                    Song(
+                        id = mediaId,
+                        title = cursor.getString(titleColumn) ?: "Unknown",
+                        artist = cursor.getString(artistColumn) ?: "Unknown Artist",
+                        album = cursor.getString(albumColumn) ?: "Unknown Album",
+                        duration = cursor.getLong(durationColumn),
+                        filePath = cursor.getString(dataColumn),
+                        dateAdded = cursor.getLong(dateColumn) * 1000,
+                        isFavorite = false
+                    )
+                }
+
                 songs.add(song)
             }
         }
 
-        return songs
+        Log.d(tag, "Scanned ${songs.size} songs")
+        return@withContext songs
     }
 }

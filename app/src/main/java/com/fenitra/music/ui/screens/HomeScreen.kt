@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -32,12 +31,15 @@ import com.fenitra.music.ui.viewmodel.MusicViewModel
 fun HomeScreen(
     viewModel: MusicViewModel,
     onNavigateToFavorites: () -> Unit,
+    onNavigateToPlaylists: () -> Unit,
     onNavigateToNowPlaying: () -> Unit
 ) {
     val songs by viewModel.allSongs.collectAsState()
+    var showSearchBar by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val searchResults by viewModel.searchResults.collectAsState()
     val currentSong by viewModel.currentSong.collectAsState()
+    var showMenu by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -54,37 +56,34 @@ fun HomeScreen(
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Library",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1C2D3D)
-                        )
-                    },
-                    actions = {
-                        IconButton(onClick = { /* Search */ }) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = Color(0xFF6B7C8C),
-                                modifier = Modifier.size(24.dp)
-                            )
+                if (showSearchBar) {
+                    SearchTopBar(
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = {
+                            searchQuery = it
+                            viewModel.searchSongs(it)
+                        },
+                        onCloseSearch = {
+                            showSearchBar = false
+                            searchQuery = ""
+                            viewModel.searchSongs("")
                         }
-                        IconButton(onClick = { /* More */ }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "Menu",
-                                tint = Color(0xFF6B7C8C),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
                     )
-                )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                "Library",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1C2D3D)
+                            )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        )
+                    )
+                }
             },
             bottomBar = {
                 Column {
@@ -94,12 +93,15 @@ fun HomeScreen(
                             onExpandClick = onNavigateToNowPlaying
                         )
                     }
-                    // Bottom Navigation
                     MinimalBottomNavigationBar(
                         selectedIndex = 0,
                         onHomeClick = { },
-                        onSearchClick = { },
-                        onLibraryClick = { }
+                        onSearchClick = {
+                            showSearchBar = !showSearchBar
+                        },
+                        onLibraryClick = {
+                            showMenu = true
+                        }
                     )
                 }
             },
@@ -136,7 +138,6 @@ fun HomeScreen(
                         }
                     }
                 } else {
-                    // Song List
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -157,7 +158,157 @@ fun HomeScreen(
                 }
             }
         }
+
+        // Menu dropdown for Library button
+        if (showMenu) {
+            LibraryMenu(
+                onDismiss = { showMenu = false },
+                onNavigateToPlaylists = {
+                    showMenu = false
+                    onNavigateToPlaylists()
+                },
+                onNavigateToFavorites = {
+                    showMenu = false
+                    onNavigateToFavorites()
+                }
+            )
+        }
     }
+}
+
+@Composable
+fun LibraryMenu(
+    onDismiss: () -> Unit,
+    onNavigateToPlaylists: () -> Unit,
+    onNavigateToFavorites: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onDismiss)
+    ) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp)
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            shadowElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                LibraryMenuItem(
+                    icon = Icons.Default.Favorite,
+                    text = "Favorites",
+                    iconTint = Color(0xFFFF5B7D),
+                    onClick = onNavigateToFavorites
+                )
+                Divider(color = Color(0xFFE8F4F8))
+                LibraryMenuItem(
+                    icon = Icons.Default.LibraryMusic,
+                    text = "Playlists",
+                    iconTint = Color(0xFF4A9FD8),
+                    onClick = onNavigateToPlaylists
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LibraryMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    iconTint: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = iconTint,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF1C2D3D)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchTopBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onCloseSearch: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            TextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        "Search songs, artists, albums...",
+                        color = Color(0xFF9BAAB8),
+                        fontSize = 16.sp
+                    )
+                },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color(0xFF1C2D3D),
+                    unfocusedTextColor = Color(0xFF1C2D3D),
+                    cursorColor = Color(0xFF4A9FD8)
+                ),
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onCloseSearch) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Close search",
+                    tint = Color(0xFF1C2D3D)
+                )
+            }
+        },
+        actions = {
+            if (searchQuery.isNotEmpty()) {
+                IconButton(onClick = { onSearchQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear search",
+                        tint = Color(0xFF6B7C8C)
+                    )
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.White.copy(alpha = 0.95f)
+        )
+    )
 }
 
 @Composable
@@ -176,7 +327,6 @@ fun MinimalSongItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Album Art
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -210,7 +360,6 @@ fun MinimalSongItem(
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        // Song Info
         Column(
             modifier = Modifier.weight(1f)
         ) {
@@ -232,7 +381,6 @@ fun MinimalSongItem(
             )
         }
 
-        // Duration
         Text(
             text = formatDuration(song.duration),
             fontSize = 12.sp,
@@ -263,7 +411,6 @@ fun MinimalBottomNavigationBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Home
             MinimalNavItem(
                 icon = Icons.Default.Home,
                 label = "Home",
@@ -271,7 +418,6 @@ fun MinimalBottomNavigationBar(
                 onClick = onHomeClick
             )
 
-            // Search
             MinimalNavItem(
                 icon = Icons.Default.Search,
                 label = "Search",
@@ -279,7 +425,6 @@ fun MinimalBottomNavigationBar(
                 onClick = onSearchClick
             )
 
-            // Library
             MinimalNavItem(
                 icon = Icons.Default.LibraryMusic,
                 label = "Library",
